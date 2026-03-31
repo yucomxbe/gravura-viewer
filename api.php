@@ -12,6 +12,30 @@ header('X-Content-Type-Options: nosniff');
 
 $refresh = isset($_GET['refresh']);
 
+// ?debug=1 — shows config + directory structure without scanning
+if (isset($_GET['debug'])) {
+    $root    = POSTERS_DIR;
+    $exists  = is_dir($root);
+    $entries = $exists ? array_diff(scandir($root), ['.','..']) : [];
+    $sample  = [];
+    foreach (array_slice($entries, 0, 3) as $e) {
+        $sub = array_diff(@scandir("$root/$e") ?: [], ['.','..']);
+        $sample[$e] = array_values(array_slice($sub, 0, 3));
+    }
+    echo json_encode([
+        'POSTERS_DIR'     => $root,
+        'dir_exists'      => $exists,
+        'readable'        => $exists && is_readable($root),
+        'top_level_dirs'  => array_values($entries),
+        'sample_children' => $sample,
+        'STATE_FILE'      => defined('STATE_FILE') ? STATE_FILE : '(not set)',
+        'state_exists'    => defined('STATE_FILE') && STATE_FILE && file_exists(STATE_FILE),
+        'php_version'     => PHP_VERSION,
+        'sys_tmp'         => sys_get_temp_dir(),
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 try {
     echo json_encode(getScan($refresh), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
