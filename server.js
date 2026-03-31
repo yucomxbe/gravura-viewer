@@ -11,7 +11,8 @@ import fs                from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { config }        from 'dotenv';
 
-config();
+// Load .env from the server's own directory (not from process CWD)
+config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '.env') });
 
 const __dirname   = path.dirname(fileURLToPath(import.meta.url));
 const PORT        = parseInt(process.env.PORT        || '3333', 10);
