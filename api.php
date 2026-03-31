@@ -12,26 +12,43 @@ header('X-Content-Type-Options: nosniff');
 
 $refresh = isset($_GET['refresh']);
 
-// ?debug=1 — shows config + directory structure without scanning
+// ?debug=1 — shows config + full 3-level directory tree sample
 if (isset($_GET['debug'])) {
-    $root    = POSTERS_DIR;
-    $exists  = is_dir($root);
-    $entries = $exists ? array_diff(scandir($root), ['.','..']) : [];
-    $sample  = [];
-    foreach (array_slice($entries, 0, 3) as $e) {
-        $sub = array_diff(@scandir("$root/$e") ?: [], ['.','..']);
-        $sample[$e] = array_values(array_slice($sub, 0, 3));
+    $root   = POSTERS_DIR;
+    $exists = is_dir($root);
+    $tree   = [];
+
+    if ($exists) {
+        foreach (array_diff(scandir($root), ['.','..']) as $type) {
+            $typeDir = "$root/$type";
+            if (!is_dir($typeDir)) continue;
+            $tree[$type] = [];
+            foreach (array_slice(array_diff(scandir($typeDir), ['.','..']), 0, 2) as $cc) {
+                $ccDir = "$typeDir/$cc";
+                if (!is_dir($ccDir)) continue;
+                $ccContents = array_diff(scandir($ccDir), ['.','..']);
+                $tree[$type][$cc] = [];
+                foreach (array_slice($ccContents, 0, 3) as $entry) {
+                    $entryPath = "$ccDir/$entry";
+                    if (is_dir($entryPath)) {
+                        $files = array_diff(scandir($entryPath), ['.','..']);
+                        $tree[$type][$cc]["$entry/"] = array_values(array_slice($files, 0, 3));
+                    } else {
+                        $tree[$type][$cc][] = $entry;
+                    }
+                }
+            }
+        }
     }
+
     echo json_encode([
-        'POSTERS_DIR'     => $root,
-        'dir_exists'      => $exists,
-        'readable'        => $exists && is_readable($root),
-        'top_level_dirs'  => array_values($entries),
-        'sample_children' => $sample,
-        'STATE_FILE'      => defined('STATE_FILE') ? STATE_FILE : '(not set)',
-        'state_exists'    => defined('STATE_FILE') && STATE_FILE && file_exists(STATE_FILE),
-        'php_version'     => PHP_VERSION,
-        'sys_tmp'         => sys_get_temp_dir(),
+        'POSTERS_DIR' => $root,
+        'dir_exists'  => $exists,
+        'readable'    => $exists && is_readable($root),
+        'tree_sample' => $tree,
+        'STATE_FILE'  => defined('STATE_FILE') ? STATE_FILE : '(not set)',
+        'state_exists'=> defined('STATE_FILE') && STATE_FILE && file_exists(STATE_FILE),
+        'php_version' => PHP_VERSION,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     exit;
 }
