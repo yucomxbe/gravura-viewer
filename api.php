@@ -3,14 +3,13 @@
  * api.php — Gravura Viewer JSON API
  * GET api.php           → { tree, flat, stats }
  * GET api.php?refresh=1 → force cache bust
+ * GET api.php?debug=1   → path diagnostics
  */
 
 require __DIR__ . '/config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
-
-$refresh = isset($_GET['refresh']);
 
 // ?debug=1 — shows config + full 3-level directory tree sample
 if (isset($_GET['debug'])) {
@@ -32,7 +31,7 @@ if (isset($_GET['debug'])) {
                     $entryPath = "$ccDir/$entry";
                     if (is_dir($entryPath)) {
                         $files = array_diff(scandir($entryPath), ['.','..']);
-                        $tree[$type][$cc]["$entry/"] = array_values(array_slice($files, 0, 3));
+                        $tree[$type][$cc]["$entry/"] = array_values(array_slice($files, 0, 5));
                     } else {
                         $tree[$type][$cc][] = $entry;
                     }
@@ -53,6 +52,8 @@ if (isset($_GET['debug'])) {
     exit;
 }
 
+$refresh = isset($_GET['refresh']);
+
 try {
     echo json_encode(getScan($refresh), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
@@ -71,9 +72,13 @@ function getScan(bool $force = false): array
         if ($cached) return $cached;
     }
 
-    $state = readState();
-    $flat  = [];
-    $tree  = [];
+    // On the FTP/DAM server only thumbnails and PDFs are stored.
+    // We use *-thumb.png files as the poster reference.
+    $manifest = readManifest();   // array of ManifestEntry from manifest.json
+    $thumbIndex = buildThumbIndex($manifest);
+
+    $flat = [];
+    $tree = [];
 
     $skipDirs = ['mock', 'cache', '.cache', 'tmp', '.', '..'];
 
@@ -81,43 +86,32 @@ function getScan(bool $force = false): array
         return buildResult([], [], 'Directory not found: ' . POSTERS_DIR);
     }
 
-    // Level 1: type
     foreach (scandir(POSTERS_DIR) as $type) {
         if (in_array(strtolower($type), $skipDirs, true)) continue;
         $typeDir = POSTERS_DIR . '/' . $type;
         if (!is_dir($typeDir)) continue;
 
-        // Level 2: country code
         foreach (scandir($typeDir) as $ccRaw) {
             if ($ccRaw === '.' || $ccRaw === '..') continue;
             $ccDir = $typeDir . '/' . $ccRaw;
             if (!is_dir($ccDir)) continue;
             $cc = strtoupper($ccRaw);
 
-            // Level 3: city
             foreach (scandir($ccDir) as $city) {
                 if ($city === '.' || $city === '..') continue;
                 $cityDir = $ccDir . '/' . $city;
                 if (!is_dir($cityDir)) continue;
 
-                $allFiles = array_diff(scandir($cityDir), ['.', '..']);
+                $allFiles = array_values(array_diff(scandir($cityDir), ['.', '..']));
 
-                // Source PNGs only (not thumbnails)
-                $sources = array_filter(
-                    $allFiles,
-                    fn($f) => str_ends_with($f, '.png') && !str_ends_with($f, '-thumb.png')
-                );
+                // Use thumbnail files as the primary poster reference
+                $thumbFiles = array_filter($allFiles, fn($f) => str_ends_with($f, '-thumb.png'));
 
-                foreach ($sources as $png) {
-                    $relPath = "$type/$ccRaw/$city/$png";
-                    $absPath = "$cityDir/$png";
-                    $st      = @stat($absPath);
-                    if (!$st) continue;
+                foreach ($thumbFiles as $thumbName) {
+                    // Base name without "-thumb.png"
+                    $base = preg_replace('/-thumb\.png$/', '', $thumbName);
 
-                    $thumbName = preg_replace('/\.png$/', '-thumb.png', $png);
-                    $hasThumb  = in_array($thumbName, $allFiles, true);
-
-                    $base    = preg_replace('/\.png$/', '', $png);
+                    // Find matching PDF (same base name prefix)
                     $pdfFile = null;
                     foreach ($allFiles as $f) {
                         if (str_ends_with($f, '.pdf') && str_starts_with($f, $base)) {
@@ -126,39 +120,33 @@ function getScan(bool $force = false): array
                         }
                     }
 
-                    // Match state entry
-                    $keyDir  = "$type/$ccRaw/$city";
-                    $se      = $state[$relPath] ?? null;
-                    if (!$se && isset($state[$keyDir])) {
-                        $candidate = $state[$keyDir];
-                        if (isset($candidate['source']) && str_ends_with($candidate['source'], $png)) {
-                            $se = $candidate;
-                        }
-                    }
+                    $thumbRel = "$type/$ccRaw/$city/$thumbName";
+                    $absThumb = "$cityDir/$thumbName";
+                    $st       = @stat($absThumb);
+                    if (!$st) continue;
 
-                    $thumbRel = $hasThumb ? "$type/$ccRaw/$city/$thumbName" : null;
-                    $pdfRel   = $pdfFile  ? "$type/$ccRaw/$city/$pdfFile"   : null;
-                    $damBase  = rtrim(DAM_BASE_URL, '/');
+                    $damBase = rtrim(DAM_BASE_URL, '/');
+                    $pdfRel  = $pdfFile ? "$type/$ccRaw/$city/$pdfFile" : null;
+
+                    // Match against manifest for rich publish metadata
+                    $entry = $thumbIndex[$thumbRel] ?? matchManifestEntry($manifest, $cc, $city, $thumbName);
 
                     $flat[] = [
-                        'id'          => $relPath,
+                        'id'          => $thumbRel,
                         'type'        => $type,
                         'cc'          => $cc,
                         'city'        => $city,
-                        'filename'    => $png,
-                        'path'        => $relPath,
+                        'filename'    => $base,           // display name (without -thumb)
+                        'path'        => $thumbRel,       // best available (thumb = only file on FTP)
                         'size'        => (int)$st['size'],
                         'mtime'       => date('c', $st['mtime']),
                         'thumb'       => $thumbRel,
                         'pdf'         => $pdfRel,
-                        'status'      => $se ? 'published' : 'pending',
-                        'publishedAt' => $se['publishedAt'] ?? null,
-                        'damSource'   => ($se && !empty($se['source']))
-                                         ? "$damBase/{$se['source']}" : null,
-                        'damThumb'    => ($se && !empty($se['thumb']))
-                                         ? "$damBase/{$se['thumb']}"  : null,
-                        'damPdf'      => ($se && !empty($se['pdf']))
-                                         ? "$damBase/{$se['pdf']}"    : null,
+                        'status'      => 'published',     // everything on FTP/DAM = published
+                        'publishedAt' => $entry['publishedAt'] ?? date('c', $st['mtime']),
+                        'damSource'   => $entry['source'] ?? null,
+                        'damThumb'    => $entry['thumb']  ?? ($damBase ? "$damBase/$thumbRel" : null),
+                        'damPdf'      => $entry['pdf']    ?? ($pdfRel && $damBase ? "$damBase/$pdfRel" : null),
                     ];
 
                     $tree[$type]        ??= [];
@@ -170,7 +158,6 @@ function getScan(bool $force = false): array
         }
     }
 
-    // Sort
     usort($flat, fn($a, $b) => strcmp($b['mtime'], $a['mtime']));
     ksort($tree);
     foreach ($tree as &$ccs) {
@@ -180,27 +167,84 @@ function getScan(bool $force = false): array
     unset($ccs, $cities);
 
     $result = buildResult($tree, $flat);
-
-    // Cache to temp file
     file_put_contents($cacheFile, json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-
     return $result;
 }
 
+// ── Manifest reader ───────────────────────────────────────────────────────────
+
+/**
+ * Read manifest.json — array of ManifestEntry objects.
+ */
+function readManifest(): array
+{
+    $file = defined('STATE_FILE') ? STATE_FILE : '';
+    if (!$file || !file_exists($file)) return [];
+    $raw  = file_get_contents($file);
+    $data = json_decode($raw, true);
+    // Manifest is a JSON array; .publish-state.json is an object — handle both
+    if (is_array($data) && isset($data[0])) return $data;          // manifest.json array
+    if (is_array($data)) return array_values($data);               // state object → flatten
+    return [];
+}
+
+/**
+ * Build an index of manifest entries keyed by the relative thumb path
+ * extracted from the full DAM URL.
+ */
+function buildThumbIndex(array $manifest): array
+{
+    $idx     = [];
+    $damBase = rtrim(DAM_BASE_URL, '/') . '/';
+    foreach ($manifest as $entry) {
+        $thumbUrl = $entry['thumb'] ?? null;
+        if (!$thumbUrl) continue;
+        // Strip DAM base URL to get relative path: type/CC/city/file-thumb.png
+        $rel = str_starts_with($thumbUrl, $damBase)
+             ? substr($thumbUrl, strlen($damBase))
+             : ltrim(parse_url($thumbUrl, PHP_URL_PATH), '/');
+        // Remove any leading /posters/ segment that may appear in the URL path
+        $rel = preg_replace('#^posters/#', '', $rel);
+        $idx[$rel] = $entry;
+    }
+    return $idx;
+}
+
+/**
+ * Fuzzy match: find a manifest entry by CC + city + thumb filename.
+ */
+function matchManifestEntry(array $manifest, string $cc, string $city, string $thumbName): ?array
+{
+    $ccLow   = strtolower($cc);
+    $cityLow = strtolower($city);
+    foreach ($manifest as $entry) {
+        if (strtolower($entry['country'] ?? '') === $ccLow
+            && strtolower($entry['city']    ?? '') === $cityLow) {
+            $thumbUrl = $entry['thumb'] ?? '';
+            if (str_contains($thumbUrl, rawurlencode($thumbName))
+             || str_contains($thumbUrl, $thumbName)) {
+                return $entry;
+            }
+        }
+    }
+    return null;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function buildResult(array $tree, array $flat, ?string $error = null): array
 {
-    $published = count(array_filter($flat, fn($p) => $p['status'] === 'published'));
-    $ccs       = array_unique(array_column($flat, 'cc'));
-    $cityKeys  = array_unique(array_map(fn($p) => $p['cc'] . '/' . $p['city'], $flat));
+    $ccs      = array_unique(array_column($flat, 'cc'));
+    $cityKeys = array_unique(array_map(fn($p) => $p['cc'] . '/' . $p['city'], $flat));
 
     $result = [
         'tree'  => $tree,
         'flat'  => $flat,
         'stats' => [
             'total'     => count($flat),
-            'published' => $published,
-            'pending'   => count($flat) - $published,
-            'withThumb' => count(array_filter($flat, fn($p) => $p['thumb'])),
+            'published' => count($flat),   // all FTP files = published
+            'pending'   => 0,
+            'withThumb' => count($flat),   // thumb IS the file
             'withPdf'   => count(array_filter($flat, fn($p) => $p['pdf'])),
             'types'     => array_values(array_unique(array_column($flat, 'type'))),
             'countries' => count($ccs),
@@ -210,12 +254,4 @@ function buildResult(array $tree, array $flat, ?string $error = null): array
     ];
     if ($error) $result['error'] = $error;
     return $result;
-}
-
-function readState(): array
-{
-    $file = defined('STATE_FILE') ? STATE_FILE : '';
-    if (!$file || !file_exists($file)) return [];
-    $raw = file_get_contents($file);
-    return json_decode($raw, true) ?? [];
 }
