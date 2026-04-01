@@ -16,9 +16,7 @@ const PAGE_SIZE = 24;
 const TYPE_ICONS = {
   map:       '🗺',
   satellite: '🛰',
-  layers:    '📐',
   skymap:    '✨',
-  lunar:     '🌙',
   vintage:   '🎨',
 };
 
