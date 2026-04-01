@@ -1,3 +1,10 @@
+<?php
+require __DIR__ . '/config.php';
+
+// Quick sanity check — show helpful message if POSTERS_DIR is not configured
+$configured = defined('POSTERS_DIR') && POSTERS_DIR !== '' && POSTERS_DIR !== '/home2/sc1bexa4078/dam.gravura-poster.com/upload/posters';
+$dirExists  = is_dir(POSTERS_DIR);
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,9 +14,19 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
+
+<?php if (!$dirExists): ?>
+<!-- Config warning banner -->
+<div style="position:fixed;top:0;left:0;right:0;z-index:999;background:#7c2d12;color:#fed7aa;padding:10px 20px;font-size:13px;font-family:monospace;display:flex;align-items:center;gap:12px">
+  <strong>⚠ POSTERS_DIR not found:</strong>
+  <code><?= htmlspecialchars(POSTERS_DIR) ?></code>
+  <span style="color:#fca572">→ Edit config.php</span>
+</div>
+<div style="height:40px"></div>
+<?php endif; ?>
 
   <!-- ── Header ── -->
   <header id="header">
@@ -51,9 +68,7 @@
         <button class="text-btn" id="all-btn" title="Show all posters">All</button>
       </div>
       <nav id="sidebar-tree">
-        <div class="loading-sidebar">
-          <span class="spinner"></span>
-        </div>
+        <div class="loading-sidebar"><span class="spinner"></span></div>
       </nav>
     </aside>
 
@@ -123,19 +138,14 @@
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-backdrop" id="modal-backdrop"></div>
     <div class="modal-box" id="modal-box">
-
       <div class="modal-header">
         <span id="modal-title" class="modal-title"></span>
         <div class="modal-header-actions">
-          <button class="icon-btn" id="modal-prev" title="Previous poster (←)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
+          <button class="icon-btn" id="modal-prev" title="Previous (←)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
-          <button class="icon-btn" id="modal-next" title="Next poster (→)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
+          <button class="icon-btn" id="modal-next" title="Next (→)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
           <button class="icon-btn" id="modal-close" title="Close (Esc)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -144,9 +154,7 @@
           </button>
         </div>
       </div>
-
       <div class="modal-body">
-        <!-- Preview panel -->
         <div class="modal-preview" id="modal-preview">
           <div class="preview-img-wrap" id="preview-img-wrap">
             <img id="preview-img" src="" alt="" loading="lazy">
@@ -160,8 +168,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Metadata panel -->
         <div class="modal-meta" id="modal-meta">
           <div class="meta-section">
             <h3 class="meta-heading">File</h3>
@@ -177,34 +183,20 @@
           </div>
         </div>
       </div>
-
       <div class="modal-footer">
-        <button class="btn btn-ghost" id="btn-open-png" title="Open full-resolution PNG in new tab">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <circle cx="8.5" cy="8.5" r="1.5"/>
-            <polyline points="21 15 16 10 5 21"/>
-          </svg>
+        <button class="btn btn-ghost" id="btn-open-png">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           Full size PNG
         </button>
-        <button class="btn btn-ghost" id="btn-open-thumb" title="Open thumbnail PNG in new tab">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 3 21 3 21 9"/>
-            <path d="M10 14 21 3"/>
-            <path d="M21 15v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>
-          </svg>
+        <button class="btn btn-ghost" id="btn-open-thumb">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><path d="M10 14 21 3"/><path d="M21 15v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>
           Thumbnail
         </button>
-        <button class="btn btn-primary" id="btn-open-pdf" title="Open print-ready PDF">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="9" y1="15" x2="15" y2="15"/>
-          </svg>
+        <button class="btn btn-primary" id="btn-open-pdf">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
           View PDF
         </button>
       </div>
-
     </div>
   </div>
 
@@ -215,12 +207,8 @@
       <div class="pdf-modal-header">
         <span id="pdf-modal-title"></span>
         <div style="display:flex;gap:6px">
-          <a class="btn btn-ghost btn-sm" id="pdf-download-btn" download title="Download PDF">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
+          <a class="btn btn-ghost btn-sm" id="pdf-download-btn" download>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download
           </a>
           <button class="icon-btn" id="pdf-close" title="Close (Esc)">
@@ -234,6 +222,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="assets/app.js"></script>
 </body>
 </html>
