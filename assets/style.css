@@ -27,10 +27,8 @@
 
   /* Type palette */
   --map:       #3b82f6;
-  --layers:    #22c55e;
   --satellite: #a855f7;
   --skymap:    #06b6d4;
-  --lunar:     #ec4899;
   --vintage:   #f97316;
 
   /* Layout */
@@ -906,16 +904,12 @@ html, body {
 
 /* ── Type color utilities ─────────────────────────────────────────────────── */
 .type-map       { background-color: var(--map) !important; }
-.type-layers    { background-color: var(--layers) !important; }
 .type-satellite { background-color: var(--satellite) !important; }
 .type-skymap    { background-color: var(--skymap) !important; }
-.type-lunar     { background-color: var(--lunar) !important; }
 .type-vintage   { background-color: var(--vintage) !important; }
 
 /* Tree dots by type */
 .dot-map       { background: var(--map); }
-.dot-layers    { background: var(--layers); }
 .dot-satellite { background: var(--satellite); }
 .dot-skymap    { background: var(--skymap); }
-.dot-lunar     { background: var(--lunar); }
 .dot-vintage   { background: var(--vintage); }

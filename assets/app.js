@@ -1,7 +1,14 @@
 /**
- * gravura-viewer/public/app.js
- * SPA logic: tree navigation, grid/list rendering, filters, detail modal, PDF viewer.
+ * gravura-viewer/assets/app.js
+ * SPA logic — PHP backend version.
+ * API:  api.php          (scan)
+ * Files: serve.php?f=    (PNG / thumb / PDF)
  */
+
+// Build a URL to serve a poster file via serve.php
+function serveUrl(relPath) {
+  return 'serve.php?f=' + encodeURIComponent(relPath);
+}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 24;
@@ -9,9 +16,7 @@ const PAGE_SIZE = 24;
 const TYPE_ICONS = {
   map:       '🗺',
   satellite: '🛰',
-  layers:    '📐',
   skymap:    '✨',
-  lunar:     '🌙',
   vintage:   '🎨',
 };
 
@@ -38,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadData(refresh = false) {
   showLoader(true);
   try {
-    const res  = await fetch(`/api/scan${refresh ? '?refresh=1' : ''}`);
+    const res  = await fetch(`api.php${refresh ? '?refresh=1' : ''}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     state.data = await res.json();
     renderAll();
@@ -246,7 +251,7 @@ function renderGrid() {
 
 // ── Grid card HTML ────────────────────────────────────────────────────────────
 function gridCardHTML(p, idx) {
-  const thumb      = p.thumb ? `/serve/${p.thumb}` : null;
+  const thumb      = p.thumb ? serveUrl(p.thumb) : null;
   const badgeCls   = `card-type-badge type-${p.type}`;
   const statusCls  = `card-status-dot ${p.status}`;
 
@@ -258,7 +263,7 @@ function gridCardHTML(p, idx) {
     ? `<button class="card-action-btn pdf" onclick="event.stopPropagation();openPdf('${esc(p.pdf)}','${esc(p.filename)}')">PDF</button>`
     : '';
 
-  const pngBtn = `<a class="card-action-btn" href="/serve/${esc(p.path)}" target="_blank" onclick="event.stopPropagation()">PNG</a>`;
+  const pngBtn = `<a class="card-action-btn" href="${serveUrl(p.path)}" target="_blank" onclick="event.stopPropagation()">PNG</a>`;
 
   return `
     <div class="poster-card" onclick="openModal(${idx})">
@@ -280,7 +285,7 @@ function gridCardHTML(p, idx) {
 
 // ── List row HTML ─────────────────────────────────────────────────────────────
 function listRowHTML(p, idx) {
-  const thumb = p.thumb ? `/serve/${p.thumb}` : null;
+  const thumb = p.thumb ? serveUrl(p.thumb) : null;
 
   const thumbEl = thumb
     ? `<img data-src="${esc(thumb)}" alt="" onload="this.classList.remove('loading')" class="loading">`
@@ -303,7 +308,7 @@ function listRowHTML(p, idx) {
       <span class="row-date">${formatDate(p.mtime)}</span>
       <div class="row-status"><span class="row-status-dot ${p.status}" title="${p.status}"></span></div>
       <div class="row-icons">
-        <a class="row-icon-btn" href="/serve/${esc(p.path)}" target="_blank" title="Open PNG" onclick="event.stopPropagation()">
+        <a class="row-icon-btn" href="${serveUrl(p.path)}" target="_blank" title="Open PNG" onclick="event.stopPropagation()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><path d="M10 14 21 3"/><path d="M21 15v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>
         </a>
         ${pdfIcon}
@@ -374,7 +379,7 @@ function renderModalContent(p) {
   const wrap = document.getElementById('preview-img-wrap');
 
   if (p.thumb) {
-    img.src = `/serve/${p.thumb}`;
+    img.src = serveUrl(p.thumb);
     img.classList.remove('hidden');
     ph.classList.add('hidden');
   } else {
@@ -424,9 +429,9 @@ function renderModalContent(p) {
   }
 
   // Footer buttons
-  document.getElementById('btn-open-png').onclick   = () => window.open(`/serve/${p.path}`, '_blank');
+  document.getElementById('btn-open-png').onclick   = () => window.open(serveUrl(p.path), '_blank');
   document.getElementById('btn-open-thumb').disabled = !p.thumb;
-  document.getElementById('btn-open-thumb').onclick  = () => p.thumb && window.open(`/serve/${p.thumb}`, '_blank');
+  document.getElementById('btn-open-thumb').onclick  = () => p.thumb && window.open(serveUrl(p.thumb), '_blank');
   document.getElementById('btn-open-pdf').disabled   = !p.pdf;
   document.getElementById('btn-open-pdf').onclick    = () => p.pdf && openPdf(p.pdf, p.filename);
 
@@ -455,9 +460,9 @@ function openPdf(relPath, filename) {
   const title  = document.getElementById('pdf-modal-title');
   const dlBtn  = document.getElementById('pdf-download-btn');
 
-  iframe.src = `/serve/${relPath}`;
+  iframe.src = serveUrl(relPath);
   title.textContent = filename || relPath;
-  dlBtn.href = `/serve/${relPath}`;
+  dlBtn.href = serveUrl(relPath);
   dlBtn.download = (filename || relPath).replace(/\.png$/, '.pdf');
 
   modal.classList.remove('hidden');
